@@ -25,7 +25,7 @@
 */
 
 /* This file contains a code which transforms grammar
-   description given by string into Marpa grammar.  Then the parsing
+   description given by string into Marpa or Lotsawa grammar.  Then the parsing
    is done without building an abstract tree. */
 
 %{
@@ -38,8 +38,11 @@
 #include "objstack.h"
 #include "hashtab.h"
 #include "ticker.h"
+#ifdef LOTSAWA
+#include "LotsawaC.h"
+#else
 #include "marpa.h"
-
+#endif
 
 #include <assert.h>
 
@@ -420,6 +423,70 @@ find_symbol (const char *name)
   return (struct sym *) *entry_ptr;
 }
 
+#ifdef LOTSAWA
+/* The following function parses grammar desrciption. */
+static LotsawaPreprocessedGrammar lotsawa_build_grammar( YaepAllocator * alloc, const char * description) {
+  int i;
+  struct sym *sym, *tab_sym, *lhs_sym;
+  const char *lhs, **rhs;
+  const char *error_string;
+  LotsawaSymbol first, rhs_ids[100]; /* enough for the longest rule */
+  LotsawaGrammar g;
+  LotsawaSymbol next_symbol_id = 0;
+  LotsawaPreprocessedGrammar result;
+
+  if ( set_sgrammar( alloc, description ) ) {
+      printf ("error in description");
+      exit (1);
+    }
+  sym_table = create_hash_table( alloc, 50000, sym_hash, sym_eq );
+
+  while ((sym = sread_terminal ()) != NULL)
+    if (insert_symbol (sym->repr, sym) == sym)
+      sym->id = next_symbol_id++;
+  first = -1;
+  while ((lhs = sread_rule (&rhs)) != NULL)
+    {
+      lhs_sym = yaep_malloc( alloc, sizeof( struct sym ) );
+      lhs_sym->repr = lhs;
+      if ((tab_sym = insert_symbol (lhs, lhs_sym)) == lhs_sym)
+	lhs_sym->id = next_symbol_id++;
+      else
+	{
+	  yaep_free( alloc, lhs_sym );
+	  lhs_sym = tab_sym;
+	}
+      if (first < 0) {
+	first = tab_sym->id;
+        g = lotsawa_grammar_create (first);
+      }
+      for (i = 0;; i++)
+	{
+	  if (rhs[i] == NULL)
+	    break;
+	  sym = yaep_malloc( alloc, sizeof( struct sym ) );
+	  sym->repr = rhs[i];
+	  if ((tab_sym = insert_symbol (rhs[i], sym)) == sym)
+	    sym->id = next_symbol_id++;
+	  else
+	    yaep_free( alloc, sym );
+	  rhs_ids[i] = tab_sym->id;
+	}
+      lotsawa_grammar_add_rule (g, lhs_sym->id, i, rhs_ids);
+    }
+  result = lotsawa_preprocessed_grammar_create (g);
+  lotsawa_grammar_destroy (g);
+  return result;
+}
+
+static void
+lotsawa_free_grammar (LotsawaPreprocessedGrammar g)
+{
+  delete_hash_table (sym_table);
+  free_sgrammar ();
+}
+
+#else
 static int
 fail (const char *s, Marpa_Grammar g)
 {
@@ -493,6 +560,11 @@ marpa_free_grammar (Marpa_Grammar *g)
   delete_hash_table (sym_table);
   free_sgrammar ();
 }
+#endif
+
+#ifdef LOTSAWA
+typedef Marpa_Symbol_ID LotsawaSymbol;
+#endif
 
 static Marpa_Symbol_ID IDENTIFIER;
 static Marpa_Symbol_ID SIGNED;
@@ -642,7 +714,7 @@ setup_tokens (void)
       sym = find_symbol (table_code_name[i].name);
       if (sym == NULL)
         {
-          printf ("%s is not described in grammar for MARPA\n",
+          printf ("%s is not described in grammar for library-based parsers\n",
                   table_code_name[i].name);
           exit (1);
         }      
@@ -1387,6 +1459,70 @@ static const char *description =
 #include <unistd.h>
 #endif
 
+#ifdef LOTSAWA
+static bool
+lotsawa_parse (LotsawaGrammar g)
+{
+  LotsawaRecognizer r = lotsawa_recognizer_create (g);
+  lotsawa_recognizer_initialize (r)
+  int i = 0;
+
+  if (!lotsawa_recognizer_finish_earleme(r)) {
+    fprintf (stderr, "Lotsawa couldn't finish initial earleme");
+    exit (1);
+  }
+
+  for (;;)
+    {
+      LotsawaSymbol token;
+      void *attr;
+      int status;
+
+      token = test_read_token (&attr);
+      if (token < 0)
+	break;
+      lotsawa_recognizer_discover (r, token, i);
+      if (!lotsawa_recognizer_finish_earleme (r)) {
+	  fprintf (stderr, "lotsawa: no progress made in earleme");
+	  exit (1);
+      }
+      i++;
+    }
+  return lotsawa_recognizer_has_complete_parse (r);
+}
+
+main (int argc, char **argv)
+{
+  ticker_t t;
+  LotsawaPreprocessedGrammar g;
+#ifdef linux
+  char *start = sbrk (0);
+#endif
+
+  YaepAllocator * alloc = yaep_alloc_new( NULL, NULL, NULL, NULL );
+  if ( alloc == NULL ) {
+    exit( 1 );
+  }
+  OS_CREATE( mem_os, alloc, 0 );
+  initiate_typedefs( alloc );
+  curr = NULL;
+  g = lotsawa_build_grammar ( alloc, description );
+  setup_tokens ();
+  store_lexs( alloc );
+  t = create_ticker ();
+  lotsawa_parse (g);
+  lotsawa_free_grammar (g);
+#ifdef linux
+  printf ("parse time %.2f, memory=%.1fkB\n", active_time (t),
+          ((char *) sbrk (0) - start) / 1024.);
+#else
+  printf ("parse time %.2f\n", active_time (t));
+#endif
+  OS_DELETE (mem_os);
+  yaep_alloc_del( alloc );
+  exit (0);
+}
+#else
 static void
 marpa_parse (Marpa_Grammar *g)
 {

@@ -112,6 +112,20 @@ add_test( ansic-test-yaep-static-lookahead ${SHELL} -c "${TIMER} ${CMAKE_CURRENT
 add_test( ansic-test-yaep-dynamic-lookahead ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/ansic-yaep 2 0 < ${TEST_DATA}" )
 add_test( ansic-test-yaep-big ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/ansic-yaep 1 0 < ${BIGTEST_DATA}" )
 
+# LOTSAWA tests
+find_path( LOTSAWA_INCLUDE LotsawaC.h )
+if ( MARPA_INCLUDE STREQUAL "MARPA_INCLUDE-NOTFOUND" )
+	message( WARNING "MARPA header not found; not performing MARPA ANSI-C test" )
+	return()
+endif()
+include_directories(
+	${MARPA_INCLUDE}
+)
+find_library( LOTSAWA_LIBS LotsawaC )
+if( LOTSAWA_LIBS STREQUAL "LOTSAWA_LIBS-NOTFOUND" )
+	message( WARNING "LOTSAWA library not found; not performing LOTSAWA ANSI-C test" )
+	return()
+endif()
 # MARPA tests
 find_path( MARPA_INCLUDE marpa.h )
 if ( MARPA_INCLUDE STREQUAL "MARPA_INCLUDE-NOTFOUND" )
@@ -122,7 +136,7 @@ include_directories(
 	${MARPA_INCLUDE}
 )
 find_library( MARPA_LIBS marpa )
-if( MARPA_LIBS STREQUAL "MARPA_LIB-NOTFOUND" )
+if( MARPA_LIBS STREQUAL "MARPA_LIBS-NOTFOUND" )
 	message( WARNING "MARPA library not found; not performing MARPA ANSI-C test" )
 	return()
 endif()
@@ -135,8 +149,20 @@ else()
 	message( WARNING "None of MSTA or bison found; not performing MARPA ANSI-C test" )
 	return()
 endif()
-add_executable( ansic-marpa test.c )
-add_dependencies( ansic-marpa ansic_c test_c )
+
+add_executable( ansic-lotsawa test.c ${BISON_test_c_OUTPUTS} )
+target_compile_definitions( ansic-lotsawa PRIVATE LOTSAWA )
+add_dependencies( ansic-lotsawa ansic_c )
+target_link_libraries( ansic-lotsawa
+	${LOTSAWA_LIBS}
+	ticker
+	yaep
+)
+add_test( ansic-test-lotsawa-small ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/ansic-lotsawa < ${TEST_DATA}" )
+add_test( ansic-test-lotsawa-big ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/ansic-lotsawa < ${BIGTEST_DATA}" )
+
+add_executable( ansic-marpa test.c ${BISON_test_c_OUTPUTS} )
+add_dependencies( ansic-marpa ansic_c )
 target_link_libraries( ansic-marpa
 	${MARPA_LIBS}
 	ticker

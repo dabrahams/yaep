@@ -166,6 +166,55 @@ else
   exit 1
 fi
 
+# MARPA Earley parser
+if test x$MARPA_DIR != x \
+   || test -f /usr/include/marpa.h \
+   && (test -f /usr/lib/libmarpa.a || test -f /usr/lib64/libmarpa.a) \
+   || test -f /usr/local/include/marpa.h \
+   && (test -f /usr/local/lib/libmarpa.a || test -f /usr/local/lib64/libmarpa.a); then
+
+if test x$MARPA_DIR = x; then
+   if  test -f /usr/include/marpa.h \
+       && (test -f /usr/lib/libmarpa.a || test -f /usr/lib64/libmarpa.a); then
+       MARPA_DIR=/usr
+   else
+       MARPA_DIR=/usr/local
+   fi
+fi
+
+echo ++++++++LOTSAWA Earley parser from $LOTSAWA_DIR: pure parsing
+
+LOTSAWA_YACC_FILE=@srcdir@/test.y
+LOTSAWA_TEST=lotsawa_test.c
+
+if test x$MSTA != x; then
+    $MSTA $LOTSAWA_YACC_FILE 2>&1 | fgrep -v 'look ahead'
+elif test x$BISON != x; then
+    $BISON -y $LOTSAWA_YACC_FILE && mv y.tab.c $LOTSAWA_TEST
+elif test x$YACC != x; then
+    $YACC $LOTSAWA_YACC_FILE && mv y.tab.c $LOTSAWA_TEST
+else
+    echo We need yacc, bison, or msta to test LOTSAWA.
+fi
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$LOTSAWA_DIR/lib:$LOTSAWA_DIR/lib64
+if test -f $LOTSAWA_TEST && $GCC -I. -I.. -I@srcdir@ -I@top_srcdir@/test -I@top_srcdir@/src -I$LOTSAWA_DIR/include -L$LOTSAWA_DIR/lib -L$LOTSAWA_DIR/lib64 @srcdir@/../ticker.c $LOTSAWA_TEST $YAEPLIB -llotsawa -o $outfile && time $outfile <$TEST; then
+  echo
+  echo LOTSAWA Earley parser -- Big test
+  if time $outfile < $BIG_TEST; then
+      echo
+  else
+      echo Failure with LOTSAWA parser on the big test
+      exit 1
+  fi
+else
+  echo Failure with LOTSAWA parser
+  exit 1
+fi
+fi
+
+rm -f $outfile
+rm -f $LOTSAWA_TEST y.tab.c $TEST
 
 # MARPA Earley parser
 if test x$MARPA_DIR != x \
