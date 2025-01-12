@@ -114,14 +114,14 @@ add_test( ansic-test-yaep-big ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/
 
 # LOTSAWA tests
 find_path( LOTSAWA_INCLUDE LotsawaC.h )
-if ( MARPA_INCLUDE STREQUAL "MARPA_INCLUDE-NOTFOUND" )
-	message( WARNING "MARPA header not found; not performing MARPA ANSI-C test" )
+if ( LOTSAWA_INCLUDE STREQUAL "LOTSAWA_INCLUDE-NOTFOUND" )
+	message( WARNING "LOTSAWA header not found; not performing LOTSAWA ANSI-C test" )
 	return()
 endif()
 include_directories(
-	${MARPA_INCLUDE}
+	${LOTSAWA_INCLUDE}
 )
-find_library( LOTSAWA_LIBS LotsawaC )
+find_library( LOTSAWA_LIBS NAMES LotsawaC )
 if( LOTSAWA_LIBS STREQUAL "LOTSAWA_LIBS-NOTFOUND" )
 	message( WARNING "LOTSAWA library not found; not performing LOTSAWA ANSI-C test" )
 	return()
@@ -146,7 +146,7 @@ if( MSTA_FOUND )
 elseif( BISON_FOUND )
 	bison_target( test_c test.y "${CMAKE_CURRENT_BINARY_DIR}/test.c" )
 else()
-	message( WARNING "None of MSTA or bison found; not performing MARPA ANSI-C test" )
+	message( WARNING "None of MSTA or bison found; not performing MARPA or Lotsawa ANSI-C test" )
 	return()
 endif()
 
@@ -157,7 +157,9 @@ target_link_libraries( ansic-lotsawa
 	${LOTSAWA_LIBS}
 	ticker
 	yaep
-)
+      )
+cmake_path( GET LOTSAWA_LIBS PARENT_PATH LOTSAWA_LIB_DIR )
+target_link_directories( ansic-lotsawa PRIVATE ${LOTSAWA_LIB_DIR} )
 add_test( ansic-test-lotsawa-small ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/ansic-lotsawa < ${TEST_DATA}" )
 add_test( ansic-test-lotsawa-big ${SHELL} -c "${TIMER} ${CMAKE_CURRENT_BINARY_DIR}/ansic-lotsawa < ${BIGTEST_DATA}" )
 

@@ -31,6 +31,7 @@
 %{
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "allocate.h"
@@ -50,7 +51,11 @@
 struct sym
 {
   const char *repr; /* terminal representation. */
+  #ifdef LOTSAWA
+  LotsawaSymbol id;
+  #else
   Marpa_Symbol_ID id;   /* terminal id. */
+  #endif
   int num;    /* order number. */
 };
 
@@ -563,7 +568,7 @@ marpa_free_grammar (Marpa_Grammar *g)
 #endif
 
 #ifdef LOTSAWA
-typedef Marpa_Symbol_ID LotsawaSymbol;
+typedef LotsawaSymbol Marpa_Symbol_ID;
 #endif
 
 static Marpa_Symbol_ID IDENTIFIER;
@@ -1461,10 +1466,10 @@ static const char *description =
 
 #ifdef LOTSAWA
 static bool
-lotsawa_parse (LotsawaGrammar g)
+lotsawa_parse (LotsawaPreprocessedGrammar g)
 {
   LotsawaRecognizer r = lotsawa_recognizer_create (g);
-  lotsawa_recognizer_initialize (r)
+  lotsawa_recognizer_initialize (r);
   int i = 0;
 
   if (!lotsawa_recognizer_finish_earleme(r)) {
@@ -1522,7 +1527,9 @@ main (int argc, char **argv)
   yaep_alloc_del( alloc );
   exit (0);
 }
+
 #else
+
 static void
 marpa_parse (Marpa_Grammar *g)
 {
@@ -1616,3 +1623,4 @@ main (int argc, char **argv)
   yaep_alloc_del( alloc );
   exit (0);
 }
+#endif
