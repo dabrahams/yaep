@@ -65,7 +65,7 @@ find_program( TIME time )
 if( TIME STREQUAL "TIME-NOTFOUND" )
 	set( TIMER "" )
 else()
-	set( TIMER "${TIME}" )
+	set( TIMER "${TIME} -l" )
 endif()
 
 # Run tests with bison

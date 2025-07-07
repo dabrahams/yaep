@@ -429,16 +429,17 @@ find_symbol (const char *name)
 }
 
 #ifdef LOTSAWA
+//FILE *tokens;
+
 /* The following function parses grammar desrciption. */
-static LotsawaPreprocessedGrammar lotsawa_build_grammar( YaepAllocator * alloc, const char * description) {
+static LotsawaGrammar lotsawa_build_grammar( YaepAllocator * alloc, const char * description) {
   int i;
   struct sym *sym, *tab_sym, *lhs_sym;
   const char *lhs, **rhs;
   const char *error_string;
   LotsawaSymbol first, rhs_ids[100]; /* enough for the longest rule */
-  LotsawaGrammar g;
+  LotsawaGrammar g = lotsawa_grammar_create();
   LotsawaSymbol next_symbol_id = 0;
-  LotsawaPreprocessedGrammar result;
 
   if ( set_sgrammar( alloc, description ) ) {
       printf ("error in description");
@@ -447,45 +448,49 @@ static LotsawaPreprocessedGrammar lotsawa_build_grammar( YaepAllocator * alloc, 
   sym_table = create_hash_table( alloc, 50000, sym_hash, sym_eq );
 
   while ((sym = sread_terminal ()) != NULL)
-    if (insert_symbol (sym->repr, sym) == sym)
+    if (insert_symbol (sym->repr, sym) == sym) {
       sym->id = next_symbol_id++;
+      lotsawa_grammar_name_symbol(g, sym->id, sym->repr);
+      // fprintf(tokens, "%d: \"%s\",\n", sym->id, sym->repr);
+    }
   first = -1;
   while ((lhs = sread_rule (&rhs)) != NULL)
     {
       lhs_sym = yaep_malloc( alloc, sizeof( struct sym ) );
       lhs_sym->repr = lhs;
-      if ((tab_sym = insert_symbol (lhs, lhs_sym)) == lhs_sym)
+      if ((tab_sym = insert_symbol (lhs, lhs_sym)) == lhs_sym) {
 	lhs_sym->id = next_symbol_id++;
-      else
-	{
-	  yaep_free( alloc, lhs_sym );
-	  lhs_sym = tab_sym;
-	}
-      if (first < 0) {
-	first = tab_sym->id;
-        g = lotsawa_grammar_create (first);
+        lotsawa_grammar_name_symbol(g, lhs_sym->id, lhs_sym->repr);
+        // fprintf(tokens, "%d: \"%s\",\n", lhs_sym->id, lhs_sym->repr);
+      } else {
+        yaep_free(alloc, lhs_sym);
+        lhs_sym = tab_sym;
       }
+      if (first < 0)
+	first = tab_sym->id;
       for (i = 0;; i++)
 	{
 	  if (rhs[i] == NULL)
 	    break;
 	  sym = yaep_malloc( alloc, sizeof( struct sym ) );
 	  sym->repr = rhs[i];
-	  if ((tab_sym = insert_symbol (rhs[i], sym)) == sym)
+	  if ((tab_sym = insert_symbol (rhs[i], sym)) == sym) {
 	    sym->id = next_symbol_id++;
+            lotsawa_grammar_name_symbol(g, sym->id, sym->repr);
+            // fprintf(tokens, "%d: \"%s\",\n", sym->id, sym->repr);
+          }
 	  else
 	    yaep_free( alloc, sym );
 	  rhs_ids[i] = tab_sym->id;
 	}
       lotsawa_grammar_add_rule (g, lhs_sym->id, i, rhs_ids);
     }
-  result = lotsawa_preprocessed_grammar_create (g);
-  lotsawa_grammar_destroy (g);
-  return result;
+  lotsawa_grammar_set_start(g, first);
+  return g;
 }
 
 static void
-lotsawa_free_grammar (LotsawaPreprocessedGrammar g)
+lotsawa_free_grammar (LotsawaGrammar g)
 {
   delete_hash_table (sym_table);
   free_sgrammar ();
@@ -1466,14 +1471,15 @@ static const char *description =
 
 #ifdef LOTSAWA
 static bool
-lotsawa_parse (LotsawaPreprocessedGrammar g)
+lotsawa_parse (LotsawaGrammar g)
 {
   LotsawaRecognizer r = lotsawa_recognizer_create (g);
   lotsawa_recognizer_initialize (r);
   int i = 0;
 
+  fflush(stdout);
   if (!lotsawa_recognizer_finish_earleme(r)) {
-    fprintf (stderr, "Lotsawa couldn't finish initial earleme");
+    fprintf (stderr, "Lotsawa couldn't finish initial earleme\n");
     exit (1);
   }
 
@@ -1488,8 +1494,8 @@ lotsawa_parse (LotsawaPreprocessedGrammar g)
 	break;
       lotsawa_recognizer_discover (r, token, i);
       if (!lotsawa_recognizer_finish_earleme (r)) {
-	  fprintf (stderr, "lotsawa: no progress made in earleme");
-	  exit (1);
+        fprintf (stderr, "lotsawa: no progress made in earleme %d\n", i);
+        exit (1);
       }
       i++;
     }
@@ -1499,10 +1505,16 @@ lotsawa_parse (LotsawaPreprocessedGrammar g)
 main (int argc, char **argv)
 {
   ticker_t t;
-  LotsawaPreprocessedGrammar g;
+  LotsawaGrammar g;
 #ifdef linux
   char *start = sbrk (0);
 #endif
+  int token, tokenCount;
+  void* attr;
+
+  //  tokens = fopen("/tmp/tokens.txt", "w");
+  printf("hello\n");
+  fflush(stdout);
 
   YaepAllocator * alloc = yaep_alloc_new( NULL, NULL, NULL, NULL );
   if ( alloc == NULL ) {
@@ -1511,9 +1523,22 @@ main (int argc, char **argv)
   OS_CREATE( mem_os, alloc, 0 );
   initiate_typedefs( alloc );
   curr = NULL;
+  printf("building grammar\n");
+  fflush(stdout);
   g = lotsawa_build_grammar ( alloc, description );
+  printf("built grammar\n");
+  fflush(stdout);
   setup_tokens ();
   store_lexs( alloc );
+  curr = NULL;
+  //  fprintf(tokens, "\n\"");
+  for (tokenCount = 0; (token = test_read_token(&attr)) >= 0; tokenCount++) {
+    //    fprintf(tokens, "%c", token+33);
+    //    if (tokenCount % 80 == 79) { fprintf(tokens, "\"\n+ \""); }
+  }
+  //  fprintf(tokens, "\"\n");
+  //  fclose(tokens);
+  curr = NULL;
   t = create_ticker ();
   lotsawa_parse (g);
   lotsawa_free_grammar (g);
